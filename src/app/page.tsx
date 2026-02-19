@@ -1,3 +1,4 @@
+import { LandingHero } from "@/components/landing-hero";
 import { TrendingTable } from "@/components/trending-table";
 import type { SpikeLevel } from "@/lib/types";
 
@@ -56,10 +57,11 @@ export default async function Home() {
     : null;
 
   return (
-    <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      <div className="space-y-6">
+    <main>
+      <LandingHero />
+      <div id="trending" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
         <div>
-          <h1 className="text-2xl font-bold text-white">Trending Collections</h1>
+          <h2 className="text-2xl font-bold text-white">Trending Collections</h2>
           <p className="text-zinc-400 mt-1">
             Real-time volume and spike detection across Solana NFT marketplaces
           </p>
@@ -89,3 +91,4 @@ export default async function Home() {
     </main>
   );
 }
+
