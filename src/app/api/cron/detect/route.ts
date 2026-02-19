@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db, schema } from "@/lib/db";
-import { sql } from "drizzle-orm";
+import { sql, eq } from "drizzle-orm";
 import { computeBaseline, detectSpike } from "@/lib/spike-detector";
 import { BASELINE_WINDOW_DAYS } from "@/lib/constants";
+import { broadcastSpikeAlert, notifyWatchers } from "@/lib/telegram";
 import type { SpikeResult } from "@/lib/types";
 
 export async function GET(req: NextRequest) {
@@ -22,6 +23,7 @@ export async function GET(req: NextRequest) {
     `);
 
     const spikesDetected: SpikeResult[] = [];
+    let alertsSent = 0;
 
     for (const row of latestSnapshots.rows as Array<{
       collection_id: string;
@@ -52,23 +54,61 @@ export async function GET(req: NextRequest) {
 
       if (spike) {
         spikesDetected.push(spike);
+
+        const multiplier = spike.baselineMean > 0
+          ? spike.currentValue / spike.baselineMean
+          : 0;
+
         await db.insert(schema.volumeSpikes).values({
           collectionId: spike.collectionId,
           spikeType: spike.spikeType,
           currentValue: spike.currentValue.toString(),
           baselineValue: spike.baselineMean.toString(),
-          multiplier: (spike.baselineMean > 0
-            ? spike.currentValue / spike.baselineMean
-            : 0
-          ).toString(),
+          multiplier: multiplier.toString(),
           detectedAt: new Date(),
         });
+
+        // Resolve collection name for alerts
+        const [collection] = await db
+          .select({ name: schema.collections.name })
+          .from(schema.collections)
+          .where(eq(schema.collections.id, spike.collectionId))
+          .limit(1);
+
+        const name = collection?.name ?? spike.collectionId;
+
+        // Send alerts — broadcast to subscribers + notify watchlist
+        const [broadcastCount, watcherCount] = await Promise.all([
+          broadcastSpikeAlert(spike, name).catch((e) => {
+            console.error("Broadcast alert error:", e);
+            return 0;
+          }),
+          notifyWatchers(spike.collectionId, spike, name).catch((e) => {
+            console.error("Watcher notify error:", e);
+            return 0;
+          }),
+        ]);
+
+        alertsSent += broadcastCount + watcherCount;
+
+        // Mark as alerted
+        // (update the latest spike row — simplistic but works for V1)
+        await db.execute(sql`
+          UPDATE volume_spikes
+          SET alerted = true
+          WHERE collection_id = ${spike.collectionId}
+            AND detected_at = (
+              SELECT MAX(detected_at) FROM volume_spikes
+              WHERE collection_id = ${spike.collectionId}
+            )
+        `);
       }
     }
 
     return NextResponse.json({
       checked: latestSnapshots.rows.length,
       spikes: spikesDetected.length,
+      alertsSent,
       details: spikesDetected,
     });
   } catch (error) {

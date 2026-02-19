@@ -71,3 +71,27 @@ export const volumeSpikes = pgTable("volume_spikes", {
   detectedAt: timestamp("detected_at", { withTimezone: true }).notNull(),
   alerted: boolean("alerted").default(false),
 });
+
+// Telegram bot subscribers
+export const telegramSubscribers = pgTable("telegram_subscribers", {
+  id: bigserial("id", { mode: "number" }).primaryKey(),
+  chatId: text("chat_id").unique().notNull(),
+  threshold: text("threshold").default("spike"), // elevated | spike | extreme
+  active: boolean("active").default(true),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+});
+
+// Watchlist entries
+export const watchlistEntries = pgTable(
+  "watchlist_entries",
+  {
+    id: bigserial("id", { mode: "number" }).primaryKey(),
+    chatId: text("chat_id").notNull(),
+    collectionId: text("collection_id").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  },
+  (table) => [
+    index("idx_watchlist_chat").on(table.chatId),
+    index("idx_watchlist_collection").on(table.collectionId),
+  ]
+);

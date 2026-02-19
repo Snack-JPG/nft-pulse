@@ -9,7 +9,11 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const rawCollections = await fetchTrendingCollections(50);
+    const { withRetry } = await import("@/lib/retry");
+    const rawCollections = await withRetry(
+      () => fetchTrendingCollections(50),
+      { label: "tensor-poll", maxRetries: 2 }
+    );
     const now = new Date();
     let upserted = 0;
 
