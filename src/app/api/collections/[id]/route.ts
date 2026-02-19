@@ -2,12 +2,16 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import * as schema from "@/lib/db/schema";
 import { eq, desc } from "drizzle-orm";
+import { checkRateLimit } from "@/lib/rate-limit";
 
 export async function GET(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
+
+  const limited = checkRateLimit(_req, { limit: 60, windowSeconds: 60 });
+  if (limited) return limited;
 
   try {
     const [collection] = await db
