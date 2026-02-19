@@ -1,0 +1,16 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/poll-tensor",
+      "schedule": "*/2 * * * *"
+    },
+    {
+      "path": "/api/cron/aggregate",
+      "schedule": "*/2 * * * *"
+    },
+    {
+      "path": "/api/cron/detect",
+      "schedule": "* * * * *"
+    }
+  ]
+}
