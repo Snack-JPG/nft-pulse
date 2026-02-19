@@ -1,36 +1,82 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# NFT Pulse — Solana Volume Tracker
+
+Real-time Solana NFT volume spike detection and alerts. Monitors all major marketplaces (Tensor, Magic Eden, etc.) for unusual trading activity using statistical anomaly detection.
+
+## Architecture
+
+```
+┌─────────────────────────────────────────────────────┐
+│                   DATA INGESTION                     │
+│                                                      │
+│  Helius Webhooks ──► /api/webhooks/helius            │
+│       (NFT sales)       │                            │
+│                         ▼                            │
+│                    PostgreSQL (Neon)                  │
+│                    ┌──────────┐                      │
+│                    │ nft_sales │                     │
+│                    └────┬─────┘                      │
+│                         │                            │
+│  /api/cron/aggregate    ▼                            │
+│  (every 2 min)    collection_snapshots               │
+│                         │                            │
+│  /api/cron/detect       ▼                            │
+│  (every 1 min)    Z-Score Spike Detection            │
+│                    │              │                   │
+│                    ▼              ▼                   │
+│              volume_spikes   Telegram Alerts          │
+│                    │                                  │
+│                    ▼                                  │
+│              Dashboard UI (Next.js)                   │
+│              ├── /          Trending table            │
+│              ├── /alerts    Spike feed                │
+│              └── /collection/:id  Detail + charts     │
+└─────────────────────────────────────────────────────┘
+```
+
+## Tech Stack
+
+- **Framework:** Next.js 16 (App Router, Turbopack)
+- **Database:** PostgreSQL via Neon Serverless + Drizzle ORM
+- **Data Sources:** Helius (webhooks), Tensor (GraphQL)
+- **Spike Detection:** Z-score algorithm with rolling 7-day baseline
+- **Alerts:** Telegram bot (grammY)
+- **Charts:** Recharts
+- **Tables:** TanStack Table
+- **Styling:** Tailwind CSS v4 (dark theme)
 
 ## Getting Started
 
-First, run the development server:
-
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+cp .env.example .env.local
+# Fill in your API keys
+
+npm install
+npx drizzle-kit push     # Create DB tables
+npm run dev               # Start dev server
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Spike Detection
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Uses Z-score anomaly detection with configurable thresholds:
+- **Elevated** (z ≥ 2.0) — Above normal
+- **Spike** (z ≥ 3.0) — Significant anomaly
+- **Extreme** (z ≥ 5.0) — Major event
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Minimum filters: 1 SOL volume + 5 sales to avoid noise from low-activity collections.
 
-## Learn More
+## API Routes
 
-To learn more about Next.js, take a look at the following resources:
+| Route | Method | Description |
+|-------|--------|-------------|
+| `/api/webhooks/helius` | POST | Receive Helius NFT sale webhooks |
+| `/api/cron/aggregate` | GET | Compute rolling window aggregations |
+| `/api/cron/detect` | GET | Run spike detection |
+| `/api/collections` | GET | Trending collections |
+| `/api/collections/[id]` | GET | Collection detail + history |
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Telegram Bot Commands
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- `/start` — Subscribe to alerts
+- `/top` — Current top movers
+- `/watchlist add/remove <collection>` — Manage watchlist
+- `/threshold elevated|spike|extreme` — Set alert level
