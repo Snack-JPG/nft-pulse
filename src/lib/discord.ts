@@ -3,23 +3,22 @@ import {
   Routes,
   type RESTPostAPIChannelMessageJSONBody,
   type APIEmbed,
-  type APIChannel,
 } from "discord-api-types/v10";
 import { db } from "./db";
 import { sql } from "drizzle-orm";
 import type { SpikeLevel, SpikeResult } from "./types";
 
-// Channel mapping by spike severity
-const SEVERITY_CHANNELS: Record<SpikeLevel, string> = {
-  elevated: "alerts-elevated",
-  spike: "alerts-spike",
-  extreme: "alerts-extreme",
+// Channel mapping by spike severity — uses env var channel IDs
+const SEVERITY_CHANNEL_ENVS: Record<SpikeLevel, string> = {
+  elevated: "DISCORD_CHANNEL_ELEVATED",
+  spike: "DISCORD_CHANNEL_SPIKE",
+  extreme: "DISCORD_CHANNEL_EXTREME",
 };
 
 const SEVERITY_COLORS: Record<SpikeLevel, number> = {
-  elevated: 0xfbbf24, // yellow
-  spike: 0xf97316, // orange
-  extreme: 0xef4444, // red
+  elevated: 0xffd700, // yellow (#FFD700)
+  spike: 0xff8c00, // orange (#FF8C00)
+  extreme: 0xff0000, // red (#FF0000)
 };
 
 const SEVERITY_EMOJI: Record<SpikeLevel, string> = {
@@ -34,34 +33,6 @@ function getRest(): REST {
   return new REST({ version: "10" }).setToken(token);
 }
 
-/** Cache guild channels to avoid repeated API calls */
-let channelCache: Map<string, string> | null = null;
-let channelCacheTime = 0;
-const CACHE_TTL = 5 * 60 * 1000; // 5 min
-
-async function getChannelId(channelName: string): Promise<string | null> {
-  const guildId = process.env.DISCORD_GUILD_ID;
-  if (!guildId) return null;
-
-  const now = Date.now();
-  if (!channelCache || now - channelCacheTime > CACHE_TTL) {
-    const rest = getRest();
-    const channels = (await rest.get(
-      Routes.guildChannels(guildId)
-    )) as APIChannel[];
-
-    channelCache = new Map();
-    for (const ch of channels) {
-      if ("name" in ch && ch.name) {
-        channelCache.set(ch.name, ch.id);
-      }
-    }
-    channelCacheTime = now;
-  }
-
-  return channelCache.get(channelName) ?? null;
-}
-
 /** Build a spike alert embed */
 export function buildSpikeEmbed(
   spike: SpikeResult,
@@ -72,14 +43,30 @@ export function buildSpikeEmbed(
     spike.baselineMean > 0
       ? (spike.currentValue / spike.baselineMean).toFixed(1)
       : "∞";
+  const changePct =
+    spike.baselineMean > 0
+      ? (((spike.currentValue - spike.baselineMean) / spike.baselineMean) * 100).toFixed(0)
+      : "∞";
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://nftpulse.app";
 
   return {
     title: `${SEVERITY_EMOJI[spike.level]} ${spike.level.toUpperCase()} — ${name}`,
+    url: `${appUrl}/collection/${encodeURIComponent(spike.collectionId)}`,
     color: SEVERITY_COLORS[spike.level],
     fields: [
       {
         name: "Volume",
         value: `**${spike.currentValue.toFixed(1)} SOL** (${mult}x baseline)`,
+        inline: true,
+      },
+      {
+        name: "Change",
+        value: `+${changePct}%`,
+        inline: true,
+      },
+      {
+        name: "Baseline",
+        value: `${spike.baselineMean.toFixed(1)} SOL`,
         inline: true,
       },
       {
@@ -105,16 +92,12 @@ export async function sendDiscordSpikeAlert(
 ): Promise<boolean> {
   try {
     const rest = getRest();
-    const channelName = SEVERITY_CHANNELS[spike.level];
-    let channelId = await getChannelId(channelName);
+    const envKey = SEVERITY_CHANNEL_ENVS[spike.level];
+    const channelId = process.env[envKey];
 
     if (!channelId) {
-      // Fallback to generic #alerts
-      channelId = await getChannelId("alerts");
-      if (!channelId) {
-        console.error("No Discord alert channels found");
-        return false;
-      }
+      console.error(`${envKey} not set — cannot send Discord alert`);
+      return false;
     }
 
     const body: RESTPostAPIChannelMessageJSONBody = {
@@ -133,9 +116,9 @@ export async function sendDiscordSpikeAlert(
 export async function sendTopMoversEmbed(): Promise<boolean> {
   try {
     const rest = getRest();
-    const channelId = await getChannelId("top-movers");
+    const channelId = process.env.DISCORD_CHANNEL_TOP_MOVERS;
     if (!channelId) {
-      console.warn("Discord channel #top-movers not found");
+      console.warn("DISCORD_CHANNEL_TOP_MOVERS not set");
       return false;
     }
 

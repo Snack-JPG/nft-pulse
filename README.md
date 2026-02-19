@@ -7,7 +7,8 @@ Real-time Solana NFT volume spike detection with a dashboard and Telegram alerts
 - **Tracks** NFT sales across Solana marketplaces via Helius webhooks
 - **Polls** Tensor API for collection-level stats (floor, volume, listings)
 - **Detects** volume spikes using z-score anomaly detection with rolling 7-day baselines
-- **Alerts** via Telegram bot — subscribe, set thresholds, watch specific collections
+- **Alerts** via Telegram bot and Discord — subscribe, set thresholds, watch specific collections
+- **Discord** bot with slash commands, severity-routed alerts, top movers leaderboard, and NFT-gated role verification
 - **Displays** a dark-themed dashboard with trending tables, volume charts, and alert feeds
 
 ## Architecture
@@ -18,7 +19,7 @@ Tensor Polling  → Cron       → Collection Snapshots
                                     ↓
                               Spike Detection (z-score)
                                     ↓
-                         Dashboard UI + Telegram Alerts
+                    Dashboard UI + Telegram + Discord Alerts
 ```
 
 ## Tech Stack
@@ -30,6 +31,7 @@ Tensor Polling  → Cron       → Collection Snapshots
 | Charts | Recharts |
 | Tables | TanStack Table |
 | Telegram | grammY (webhook mode) |
+| Discord | discord.js / @discordjs/rest |
 | Styling | Tailwind CSS v4 (dark theme) |
 
 ## Setup
@@ -62,6 +64,38 @@ After deploying, hit:
 GET /api/telegram/setup?secret=YOUR_CRON_SECRET
 ```
 
+### Discord Bot Setup
+
+1. Create an application at [discord.com/developers](https://discord.com/developers/applications)
+2. Under **Bot**, enable the bot and copy the token → `DISCORD_BOT_TOKEN`
+3. Copy the **Application ID** and **Public Key** → `DISCORD_PUBLIC_KEY`
+4. Under **OAuth2 → URL Generator**, select `bot` + `applications.commands` scopes with permissions: Send Messages, Embed Links, Manage Roles
+5. Invite the bot to your server using the generated URL
+6. Set the **Interactions Endpoint URL** to `https://your-domain.com/api/discord`
+7. Create channels for alerts and copy their IDs into `.env`:
+   - `DISCORD_CHANNEL_ELEVATED` — moderate volume spikes
+   - `DISCORD_CHANNEL_SPIKE` — significant spikes
+   - `DISCORD_CHANNEL_EXTREME` — extreme spikes
+   - `DISCORD_CHANNEL_TOP_MOVERS` — hourly leaderboard
+8. Create a "Premium" role and copy its ID → `DISCORD_ROLE_PREMIUM`
+
+**Register slash commands** (one-time, run locally):
+```bash
+npx ts-node -e "
+const { REST, Routes } = require('discord-api-types/v10');
+const rest = new (require('@discordjs/rest').REST)({ version: '10' }).setToken(process.env.DISCORD_BOT_TOKEN);
+rest.put(Routes.applicationGuildCommands(process.env.DISCORD_APP_ID, process.env.DISCORD_GUILD_ID), {
+  body: [
+    { name: 'top', description: 'Top 10 collections by 1h volume' },
+    { name: 'alerts', description: 'Recent spike alerts' },
+    { name: 'status', description: 'NFT Pulse system status' },
+  ]
+});
+"
+```
+
+**NFT-gated verification:** Users connect their Solana wallet on the dashboard and verify NFT ownership to receive the Premium role, granting access to #alpha channels.
+
 ### Cron Endpoints
 
 Set up external cron (e.g. Vercel Cron, QStash) to call these:
@@ -71,6 +105,7 @@ Set up external cron (e.g. Vercel Cron, QStash) to call these:
 | `/api/cron/poll-tensor` | Every 2 min | Fetch trending collection stats |
 | `/api/cron/aggregate` | Every 2 min | Aggregate sale data into snapshots |
 | `/api/cron/detect` | Every 1 min | Run spike detection + send alerts |
+| `/api/cron/top-movers` | Every 1 hour | Post top movers leaderboard to Discord |
 
 All cron endpoints require `Authorization: Bearer CRON_SECRET` header.
 

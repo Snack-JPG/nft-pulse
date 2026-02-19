@@ -11,6 +11,10 @@
     {
       "path": "/api/cron/detect",
       "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/cron/top-movers",
+      "schedule": "0 * * * *"
     }
   ]
 }
