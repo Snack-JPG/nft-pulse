@@ -11,6 +11,7 @@ import {
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { SpikeBadge } from "./spike-badge";
+import { Sparkline } from "./sparkline";
 import type { SpikeLevel } from "@/lib/types";
 
 interface TableRow {
@@ -22,6 +23,8 @@ interface TableRow {
   salesCount1h: number;
   uniqueBuyers1h: number;
   spikeLevel: SpikeLevel | null;
+  /** Recent hourly volume snapshots for sparkline (oldest→newest) */
+  volumeHistory?: number[];
 }
 
 const columnHelper = createColumnHelper<TableRow>();
@@ -59,6 +62,14 @@ const columns = [
         {formatSol(info.getValue())} SOL
       </span>
     ),
+  }),
+  columnHelper.display({
+    id: "sparkline",
+    header: "Trend",
+    cell: (info) => (
+      <Sparkline data={info.row.original.volumeHistory ?? []} />
+    ),
+    enableSorting: false,
   }),
   columnHelper.accessor("volume24h", {
     header: "24h Vol",

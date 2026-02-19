@@ -38,7 +38,28 @@ export async function GET(req: NextRequest) {
       LIMIT 50
     `);
 
-    return NextResponse.json(results.rows);
+    // Fetch recent hourly volume history (last 12 snapshots) for sparklines
+    const historyResults = await db.execute(sql`
+      SELECT collection_id, array_agg(vol ORDER BY snapshot_at ASC) AS volume_history
+      FROM (
+        SELECT collection_id, volume_1h::float AS vol, snapshot_at
+        FROM collection_snapshots
+        WHERE snapshot_at > NOW() - INTERVAL '12 hours'
+      ) sub
+      GROUP BY collection_id
+    `);
+
+    const historyMap = new Map<string, number[]>();
+    for (const row of historyResults.rows as Array<{ collection_id: string; volume_history: number[] }>) {
+      historyMap.set(row.collection_id, row.volume_history);
+    }
+
+    const rows = (results.rows as Array<Record<string, unknown>>).map((r) => ({
+      ...r,
+      volume_history: historyMap.get(r.collection_id as string) ?? [],
+    }));
+
+    return NextResponse.json(rows);
   } catch (error) {
     console.error("Collections API error:", error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });

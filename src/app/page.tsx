@@ -14,6 +14,7 @@ interface CollectionRow {
   listings_count: number | null;
   spike_type: string | null;
   multiplier: number | null;
+  volume_history: number[] | null;
 }
 
 function inferSpikeLevel(multiplier: number | null): SpikeLevel | null {
@@ -50,6 +51,7 @@ export default async function Home() {
         salesCount1h: c.sales_count_1h ?? 0,
         uniqueBuyers1h: c.unique_buyers_1h ?? 0,
         spikeLevel: inferSpikeLevel(c.multiplier),
+        volumeHistory: c.volume_history ?? [],
       }))
     : null;
 
