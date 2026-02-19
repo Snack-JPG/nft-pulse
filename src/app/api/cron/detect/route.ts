@@ -4,6 +4,7 @@ import { sql, eq } from "drizzle-orm";
 import { computeBaseline, detectSpike } from "@/lib/spike-detector";
 import { BASELINE_WINDOW_DAYS } from "@/lib/constants";
 import { broadcastSpikeAlert, notifyWatchers } from "@/lib/telegram";
+import { sendDiscordSpikeAlert } from "@/lib/discord";
 import { verifyCronAuth } from "@/lib/cron-auth";
 import type { SpikeResult } from "@/lib/types";
 
@@ -77,7 +78,7 @@ export async function GET(req: NextRequest) {
 
         const name = collection?.name ?? spike.collectionId;
 
-        // Send alerts — broadcast to subscribers + notify watchlist
+        // Send alerts — broadcast to subscribers + notify watchlist + Discord
         const [broadcastCount, watcherCount] = await Promise.all([
           broadcastSpikeAlert(spike, name).catch((e) => {
             console.error("Broadcast alert error:", e);
@@ -86,6 +87,10 @@ export async function GET(req: NextRequest) {
           notifyWatchers(spike.collectionId, spike, name).catch((e) => {
             console.error("Watcher notify error:", e);
             return 0;
+          }),
+          sendDiscordSpikeAlert(spike, name).catch((e) => {
+            console.error("Discord alert error:", e);
+            return false;
           }),
         ]);
 
