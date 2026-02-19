@@ -64,11 +64,32 @@ export default async function CollectionPage({
   const { id } = await params;
   const data = await getCollectionData(id);
 
-  const name = data?.collection?.name ?? id.replace(/-/g, " ");
-  const latestSnapshot = data?.snapshots?.[0];
-  const spikeLevel = data ? latestSpikeLevel(data.spikes) : null;
+  if (!data) {
+    return (
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <Link
+          href="/"
+          className="inline-flex items-center gap-1 text-zinc-400 hover:text-white transition-colors text-sm"
+        >
+          ← Back to trending
+        </Link>
+        <div className="text-center py-16 text-zinc-500 mt-8">
+          <p className="text-4xl mb-3">🔍</p>
+          <p className="text-lg font-medium">Collection not found</p>
+          <p className="text-sm mt-1">
+            No data available for <span className="font-mono text-zinc-400">{id}</span>.
+            It may not be tracked yet.
+          </p>
+        </div>
+      </main>
+    );
+  }
 
-  const chartData = (data?.snapshots ?? [])
+  const name = data.collection?.name ?? id.replace(/-/g, " ");
+  const latestSnapshot = data.snapshots?.[0];
+  const spikeLevel = latestSpikeLevel(data.spikes);
+
+  const chartData = (data.snapshots ?? [])
     .slice(0, 72)
     .reverse()
     .map((s) => ({
@@ -85,7 +106,7 @@ export default async function CollectionPage({
     { label: "Volume (24h)", value: latestSnapshot ? `${parseFloat(latestSnapshot.volume_24h ?? "0").toFixed(0)} SOL` : "—" },
     { label: "Sales (24h)", value: latestSnapshot?.sales_count_24h?.toString() ?? "—" },
     { label: "Listings", value: latestSnapshot?.listings_count?.toString() ?? "—" },
-    { label: "Supply", value: data?.collection?.total_supply?.toLocaleString() ?? "—" },
+    { label: "Supply", value: data.collection?.total_supply?.toLocaleString() ?? "—" },
   ];
 
   return (
@@ -99,7 +120,7 @@ export default async function CollectionPage({
         </Link>
 
         <div className="flex items-center gap-4">
-          {data?.collection?.image_url ? (
+          {data.collection?.image_url ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
               src={data.collection.image_url}
@@ -145,7 +166,7 @@ export default async function CollectionPage({
           </div>
         )}
 
-        {data && data.spikes.length > 0 && (
+        {data.spikes.length > 0 && (
           <div>
             <h2 className="text-lg font-semibold text-white mb-3">
               Recent Spikes
