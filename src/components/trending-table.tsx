@@ -9,6 +9,7 @@ import {
   type SortingState,
 } from "@tanstack/react-table";
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { SpikeBadge } from "./spike-badge";
 import type { SpikeLevel } from "@/lib/types";
 
@@ -25,7 +26,20 @@ interface TableRow {
 
 const columnHelper = createColumnHelper<TableRow>();
 
+const formatSol = (v: number) =>
+  v >= 1000 ? `${(v / 1000).toFixed(1)}K` : v.toFixed(v < 10 ? 2 : 0);
+
 const columns = [
+  columnHelper.display({
+    id: "rank",
+    header: "#",
+    cell: (info) => (
+      <span className="text-zinc-500 font-mono text-xs">
+        {info.row.index + 1}
+      </span>
+    ),
+    enableSorting: false,
+  }),
   columnHelper.accessor("name", {
     header: "Collection",
     cell: (info) => (
@@ -35,14 +49,14 @@ const columns = [
   columnHelper.accessor("floorPriceSol", {
     header: "Floor",
     cell: (info) => (
-      <span className="font-mono">{info.getValue().toFixed(2)} SOL</span>
+      <span className="font-mono">{formatSol(info.getValue())} SOL</span>
     ),
   }),
   columnHelper.accessor("volume1h", {
     header: "1h Vol",
     cell: (info) => (
       <span className="font-mono text-purple-400">
-        {info.getValue().toLocaleString()} SOL
+        {formatSol(info.getValue())} SOL
       </span>
     ),
   }),
@@ -50,7 +64,7 @@ const columns = [
     header: "24h Vol",
     cell: (info) => (
       <span className="font-mono font-medium text-purple-400">
-        {info.getValue().toLocaleString()} SOL
+        {formatSol(info.getValue())} SOL
       </span>
     ),
   }),
@@ -70,8 +84,9 @@ const columns = [
 ];
 
 export function TrendingTable({ data }: { data: TableRow[] }) {
+  const router = useRouter();
   const [sorting, setSorting] = useState<SortingState>([
-    { id: "volume24h", desc: true },
+    { id: "volume1h", desc: true },
   ]);
 
   const table = useReactTable({
@@ -106,7 +121,11 @@ export function TrendingTable({ data }: { data: TableRow[] }) {
         </thead>
         <tbody>
           {table.getRowModel().rows.map((row) => (
-            <tr key={row.id} className="border-b border-zinc-800/50 hover:bg-zinc-800/30 transition-colors cursor-pointer">
+            <tr
+              key={row.id}
+              className="border-b border-zinc-800/50 hover:bg-zinc-800/30 transition-colors cursor-pointer"
+              onClick={() => router.push(`/collection/${row.original.id}`)}
+            >
               {row.getVisibleCells().map((cell) => (
                 <td key={cell.id} className="px-4 py-3">
                   {flexRender(cell.column.columnDef.cell, cell.getContext())}
