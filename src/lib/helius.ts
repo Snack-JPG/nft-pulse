@@ -91,3 +91,63 @@ export function verifyHeliusWebhook(
   // Helius uses a simple authorization header check
   return signature === secret;
 }
+
+// --- Collection Resolution via Helius DAS API ---
+
+// In-memory cache: mint → collectionId (or null if unresolvable)
+const collectionCache = new Map<string, string | null>();
+
+/**
+ * Resolve a mint address to its verified collection address using Helius DAS API.
+ * Returns the collection address (grouping key), or falls back to the mint itself.
+ * Results are cached in memory to avoid repeated API calls for the same mint.
+ */
+export async function resolveCollectionId(mint: string): Promise<string> {
+  if (mint === "unknown") return "unknown";
+
+  const cached = collectionCache.get(mint);
+  if (cached !== undefined) return cached ?? mint;
+
+  const apiKey = process.env.HELIUS_API_KEY;
+  if (!apiKey) return mint; // No key, can't resolve
+
+  try {
+    const res = await fetch(`https://mainnet.helius-rpc.com/?api-key=${apiKey}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: "resolve-collection",
+        method: "getAsset",
+        params: { id: mint },
+      }),
+    });
+
+    if (!res.ok) {
+      collectionCache.set(mint, null);
+      return mint;
+    }
+
+    const json = await res.json() as {
+      result?: {
+        grouping?: Array<{ group_key: string; group_value: string }>;
+      };
+    };
+
+    const collection = json.result?.grouping?.find(
+      (g) => g.group_key === "collection"
+    );
+
+    if (collection?.group_value) {
+      collectionCache.set(mint, collection.group_value);
+      return collection.group_value;
+    }
+
+    collectionCache.set(mint, null);
+    return mint;
+  } catch (err) {
+    console.error(`[helius] Failed to resolve collection for mint ${mint}:`, err);
+    collectionCache.set(mint, null);
+    return mint;
+  }
+}

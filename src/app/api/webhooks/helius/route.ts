@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db, schema } from "@/lib/db";
-import { parseHeliusWebhook, verifyHeliusWebhook } from "@/lib/helius";
+import { parseHeliusWebhook, verifyHeliusWebhook, resolveCollectionId } from "@/lib/helius";
 
 export async function POST(req: NextRequest) {
   // Verify webhook authenticity
@@ -19,21 +19,24 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ processed: 0 });
     }
 
+    // Resolve mint → collection address via Helius DAS API
+    const resolvedSales = await Promise.all(
+      sales.map(async (s) => ({
+        signature: s.signature,
+        collectionId: await resolveCollectionId(s.mint),
+        marketplace: s.marketplace,
+        priceSol: s.priceSol.toString(),
+        buyer: s.buyer,
+        seller: s.seller,
+        mint: s.mint,
+        timestamp: s.timestamp,
+      }))
+    );
+
     // Batch insert sales
     await db
       .insert(schema.nftSales)
-      .values(
-        sales.map((s) => ({
-          signature: s.signature,
-          collectionId: s.collectionId,
-          marketplace: s.marketplace,
-          priceSol: s.priceSol.toString(),
-          buyer: s.buyer,
-          seller: s.seller,
-          mint: s.mint,
-          timestamp: s.timestamp,
-        }))
-      )
+      .values(resolvedSales)
       .onConflictDoNothing({ target: schema.nftSales.signature });
 
     return NextResponse.json({ processed: sales.length });
