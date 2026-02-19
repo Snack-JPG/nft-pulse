@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { ConnectWalletButton } from "@/components/connect-wallet-button";
 
 const NAV_ITEMS = [
   { href: "/", label: "Trending", icon: "📈" },
@@ -37,6 +38,8 @@ export function Nav() {
               </Link>
             ))}
           </div>
+
+          <ConnectWalletButton />
         </div>
       </div>
     </nav>
